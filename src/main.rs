@@ -8,7 +8,7 @@ struct GameState {
     round: i32,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 enum Action {
     Heads,
     Tails,
@@ -123,12 +123,18 @@ impl From<Node> for Option<Box<Node>> {
 
 fn mcts(state: GameState, n_iterations: i32) -> Action {
     let root = Node::new(Action::Heads, state).into();
-    let tree = Tree::new(root);
+    let mut tree = Tree::new(root);
 
     for _ in 0..n_iterations {
-        let node = select(&tree);
-        let node = expand(node);
-        let result = simulate(node);
+        let node = select(&mut tree);
+
+        let result = if node.state.round == 10 {
+            evaluate(node)
+        } else {
+            let node = expand(node);
+            simulate(node)
+        };
+
         backpropagate(result);
     }
 
@@ -136,17 +142,17 @@ fn mcts(state: GameState, n_iterations: i32) -> Action {
     best_action
 }
 
-fn select(tree: &Tree) -> &Box<Node> {
-    let mut current_node = tree.root.as_ref().unwrap();
+fn select(tree: &mut Tree) -> &mut Node {
+    let mut current_node = tree.root.as_mut().unwrap();
 
     while is_fully_expanded(current_node) {
         current_node = best_child(current_node);
     }
 
-    current_node
+    current_node.as_mut()
 }
 
-fn expand(node: &Box<Node>) -> &Box<Node> {
+fn expand(node: &mut Node) -> &mut Box<Node> {
     let unexplored_actions = node.state.my_possible_actions
         .iter()
         .filter(|action| !node.contains(action))
@@ -154,9 +160,33 @@ fn expand(node: &Box<Node>) -> &Box<Node> {
 
     // Pick a random action from the unexplored actions
     let mut rng = rand::thread_rng();
-    let random_action = unexplored_actions.choose(&mut rng).unwrap();
+    let random_action = **unexplored_actions.choose(&mut rng).unwrap();
 
-    // ... (create a new Node based on the random action and return it)
+    let my_score = if random_action == Action::Heads {
+        node.state.my_score + 1
+    } else {
+        node.state.my_score
+    };
+
+    let op_score = if random_action == Action::Tails {
+        node.state.op_score + 1
+    } else {
+        node.state.op_score
+    };
+
+    // Update the game state with the random action
+    let state = GameState {
+        my_score,
+        op_score,
+        my_possible_actions: node.state.my_possible_actions.clone(),
+        op_possible_actions: node.state.op_possible_actions.clone(),
+        round: node.state.round + 1,
+    };
+
+    let new_node = Node::new(random_action, state).into();
+    node.children.push(new_node);
+
+    node.children.last_mut().unwrap().as_mut().unwrap()
 }
 
 fn simulate(node: &Box<Node>) -> i32 {
@@ -175,16 +205,33 @@ fn best_action(tree: &Tree) -> Action {
 // Selection Helpers
 // ------------------------------------
 
-fn is_fully_expanded(node: &Box<Node>) -> bool {
+fn is_fully_expanded(node: &mut Node) -> bool {
     unimplemented!()
 }
 
-fn best_child(node: &Box<Node>) -> &Box<Node> {
+fn best_child(node: &mut Node) -> &mut Box<Node> {
     unimplemented!()
 }
 
-fn uct_value(node: &Box<Node>) -> f32 {
+fn uct_value(node: &mut Node) -> f32 {
     unimplemented!()
 }
 
-fn main() {}
+// ------------------------------------
+// Simulation Helpers
+// ------------------------------------
+
+fn evaluate(node: &mut Node) -> i32 {
+    unimplemented!()
+}
+
+fn main() {
+    let state = GameState {
+        my_score: 0,
+        op_score: 0,
+        my_possible_actions: vec![Action::Heads, Action::Tails],
+        op_possible_actions: vec![Action::Heads, Action::Tails],
+        round: 0,
+    };
+    mcts(state, 1000);
+}
